@@ -13,6 +13,11 @@ from .models import (
     Variable,
     TemplateParameter,
     ActivationCondition,
+    # Экспорт/Импорт
+    ContainerExport,
+    ExportedTag,
+    ExportedTrigger,
+    ExportedVariable,
     # Шаблоны
     TagTemplates,
     TriggerTemplates,
@@ -34,6 +39,11 @@ __all__ = [
     "Variable",
     "TemplateParameter",
     "ActivationCondition",
+    # Экспорт/Импорт
+    "ContainerExport",
+    "ExportedTag",
+    "ExportedTrigger",
+    "ExportedVariable",
     # Шаблоны
     "TagTemplates",
     "TriggerTemplates",

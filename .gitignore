@@ -39,3 +39,8 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# Бэкапы учётных данных, дампы контейнеров, lock-файлы Office
+config.py.bak*
+exports/
+~$*

@@ -142,6 +142,18 @@ class Tag:
             original_tag_id=data.get("originalTagId"),
         )
 
+    @property
+    def html_code(self) -> Optional[str]:
+        """
+        HTML/JS код для chtml-тегов.
+        Заполнен только если тег получен через get_tags_with_code() или из changelog.
+        Стандартный get_tags() не возвращает parameters → html_code будет None.
+        """
+        for p in self.parameters:
+            if p.type == "Code" and p.parameter_id == "0":
+                return p.value
+        return None
+
 
 @dataclass
 class Trigger:
@@ -321,7 +333,6 @@ class VariableTemplates:
     JS_VARIABLE = "js_variable"             # Переменная JavaScript (window.xxx)
     DATA_LAYER = "datalayer"                # Переменная уровня данных (dataLayer)
     CONSTANT = "constant"                   # Константа
-    CUSTOM_JS = "custom_js"                 # Пользовательский JavaScript (функция)
 
     # Страница
     URL = "url"                             # Адрес страницы (path, host, query, etc.)
@@ -414,3 +425,156 @@ class BuiltInVariables:
     EVENT = "event"                         # Event (из dataLayer)
     CONTAINER_VERSION = "container_version" # Container Version
     RANDOM_NUMBER = "random_number"         # Random Number
+
+
+# ============ ЭКСПОРТ/ИМПОРТ КОНТЕЙНЕРА ============
+
+@dataclass
+class ExportedTag:
+    """Тег для экспорта (без внутренних ID)"""
+    name: str
+    template_id: str
+    trigger_names: list[str]  # Имена триггеров вместо ID
+    status: str = "Active"
+    tag_priority: int = 0
+    # Код тега (для chtml) - должен быть заполнен вручную, т.к. API не возвращает
+    html_code: Optional[str] = None
+    parameters: list[dict] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "templateId": self.template_id,
+            "triggerNames": self.trigger_names,
+            "status": self.status,
+            "tagPriority": self.tag_priority,
+            "htmlCode": self.html_code,
+            "parameters": self.parameters,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ExportedTag":
+        return cls(
+            name=data.get("name", ""),
+            template_id=data.get("templateId", ""),
+            trigger_names=data.get("triggerNames", []),
+            status=data.get("status", "Active"),
+            tag_priority=data.get("tagPriority", 0),
+            html_code=data.get("htmlCode"),
+            parameters=data.get("parameters", []),
+        )
+
+
+@dataclass
+class ExportedTrigger:
+    """Триггер для экспорта"""
+    name: str
+    template_id: str
+    activation_conditions: list[dict] = field(default_factory=list)
+    parameters: list[dict] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "templateId": self.template_id,
+            "activationConditions": self.activation_conditions,
+            "parameters": self.parameters,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ExportedTrigger":
+        return cls(
+            name=data.get("name", ""),
+            template_id=data.get("templateId", ""),
+            activation_conditions=data.get("activationConditions", []),
+            parameters=data.get("parameters", []),
+        )
+
+
+@dataclass
+class ExportedVariable:
+    """Кастомная переменная для экспорта"""
+    name: str
+    template_id: str
+    parameters: list[dict] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "templateId": self.template_id,
+            "parameters": self.parameters,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ExportedVariable":
+        return cls(
+            name=data.get("name", ""),
+            template_id=data.get("templateId", ""),
+            parameters=data.get("parameters", []),
+        )
+
+
+@dataclass
+class ContainerExport:
+    """
+    Экспорт контейнера YTM.
+
+    Содержит все теги, триггеры и переменные контейнера.
+    Может быть сохранён в JSON и импортирован в другой контейнер.
+
+    Ограничение: API Яндекса не возвращает код тегов (html_code),
+    поэтому для полного бэкапа код нужно хранить отдельно.
+    """
+    container_id: str
+    metrika_id: str
+    export_date: str
+    tags: list[ExportedTag] = field(default_factory=list)
+    triggers: list[ExportedTrigger] = field(default_factory=list)
+    variables: list[ExportedVariable] = field(default_factory=list)
+    # Маппинг триггер ID → имя (для восстановления связей при импорте)
+    trigger_id_to_name: dict[str, str] = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "container_id": self.container_id,
+            "metrika_id": self.metrika_id,
+            "export_date": self.export_date,
+            "tags": [t.to_dict() for t in self.tags],
+            "triggers": [t.to_dict() for t in self.triggers],
+            "variables": [v.to_dict() for v in self.variables],
+            "trigger_id_to_name": self.trigger_id_to_name,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ContainerExport":
+        return cls(
+            container_id=data.get("container_id", ""),
+            metrika_id=data.get("metrika_id", ""),
+            export_date=data.get("export_date", ""),
+            tags=[ExportedTag.from_dict(t) for t in data.get("tags", [])],
+            triggers=[ExportedTrigger.from_dict(t) for t in data.get("triggers", [])],
+            variables=[ExportedVariable.from_dict(v) for v in data.get("variables", [])],
+            trigger_id_to_name=data.get("trigger_id_to_name", {}),
+        )
+
+    def to_json(self, indent: int = 2) -> str:
+        """Сериализовать в JSON строку"""
+        import json
+        return json.dumps(self.to_dict(), ensure_ascii=False, indent=indent)
+
+    @classmethod
+    def from_json(cls, json_str: str) -> "ContainerExport":
+        """Десериализовать из JSON строки"""
+        import json
+        return cls.from_dict(json.loads(json_str))
+
+    def save(self, path: str) -> None:
+        """Сохранить в файл"""
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(self.to_json())
+
+    @classmethod
+    def load(cls, path: str) -> "ContainerExport":
+        """Загрузить из файла"""
+        with open(path, "r", encoding="utf-8") as f:
+            return cls.from_json(f.read())

@@ -222,6 +222,132 @@ query ytmAvailableTemplates(
 """
 )
 
+# Создание кастомного шаблона
+MUTATION_CREATE_TEMPLATE = (
+    FRAGMENT_API_ERROR
+    + FRAGMENT_DATE
+    + """
+fragment ytmTemplateParameter on YtmTemplateParameter {
+    parameterId name label helpText order type isRequired
+    enablingConditions { ...ytmEnablingParameterCondition }
+    textInputConfiguration { ...ytmTextInputConfiguration }
+    textListConfiguration { ...ytmTextListConfiguration }
+    listConfiguration { ...ytmListConfiguration }
+    tableColumnConfigurations { ...ytmTableColumnConfiguration }
+}
+fragment ytmEnablingParameterCondition on YtmEnablingParameterCondition {
+    id type targetParameter targetValue
+}
+fragment ytmTextInputConfiguration on YtmTextInputConfiguration {
+    defaultValue placeholder
+}
+fragment ytmTextListConfiguration on YtmTextListConfiguration {
+    placeholder
+}
+fragment ytmListConfiguration on YtmListConfiguration {
+    items { ...ytmListItem }
+    variablesEnabled
+}
+fragment ytmListItem on YtmListItem { id name value }
+fragment ytmTableColumnConfiguration on YtmTableColumnConfiguration {
+    columnNumber
+    cell { ...ytmTableTemplateParameter }
+}
+fragment ytmTableTemplateParameter on YtmTableTemplateParameter {
+    parameterId name label helpText order type isRequired
+    enablingConditions { ...ytmEnablingParameterCondition }
+    textInputConfiguration { ...ytmTextInputConfiguration }
+    textListConfiguration { ...ytmTextListConfiguration }
+    listConfiguration { ...ytmListConfiguration }
+}
+fragment ytmCompilerTemplatePermissions on YtmCompilerTemplatePermissions {
+    canAccessTemplateStorage canInjectHiddenIframeUrls canLoadScriptUrls logging
+    canReadCharacterSet canReadContainerData canReadEventMetadata canReadDocumentTitle
+    canSendPixelUrlPatterns canWriteDataLayerKeys
+    canAccessGlobals { ...ytmAccessGlobalsPermission }
+    canAccessLocalStorage { ...ytmAccessReadWriteStoragePermission }
+    canGetCookies { ...ytmGetKeyStoragePermission }
+    canGetReferrer { ...ytmGetUrlPermission }
+    canGetUrl { ...ytmGetUrlPermission }
+    canReadDataLayerKeys { ...ytmGetKeyStoragePermission }
+    canSetCookies { ...ytmSetCookiesPermission }
+    canAccessAllGlobals canSendAllPixels canSetUnsafeHtml
+}
+fragment ytmAccessGlobalsPermission on YtmAccessGlobalsPermission { key read write execute }
+fragment ytmAccessReadWriteStoragePermission on YtmAccessReadWriteStoragePermission { key read write }
+fragment ytmGetKeyStoragePermission on YtmGetKeyStoragePermission { allKeys keys }
+fragment ytmGetUrlPermission on YtmGetUrlPermission {
+    allComponents
+    selectedComponents { ...ytmUrlComponentsPermission }
+}
+fragment ytmUrlComponentsPermission on YtmUrlComponentsPermission {
+    protocol host port path extension fragment
+    query { ...ytmGetKeyStoragePermission }
+}
+fragment ytmSetCookiesPermission on YtmSetCookiesPermission { cookieName domain path secure session }
+fragment ytmTemplateData on YtmTemplateData {
+    code
+    parameters { ...ytmTemplateParameter }
+    permissions { ...ytmCompilerTemplatePermissions }
+    features
+}
+fragment ytmTemplateDetailed on YtmTemplateDetailed {
+    containerId templateId name author type definitionType publicity
+    variableTemplateType triggerTemplateType tagTemplateType
+    templateVersion hasPublishedVersion isHidden versionStatus
+    moderationStatus moderationRequestId moderationRejectReason
+    versionUpdated { ...dateDto }
+    description documentationLink mainPageLink email changes status linksNumber
+    created { ...dateDto }
+    updated { ...dateDto }
+    data { ...ytmTemplateData }
+}
+
+mutation createYtmTemplate($containerId: String!, $template: YtmTemplateDetailedInput!) {
+    createYtmTemplate(containerId: $containerId, template: $template) {
+        data { ...ytmTemplateDetailed }
+        error { ...apiError }
+    }
+}
+"""
+)
+
+# Публикация кастомного шаблона
+# Возвращает опубликованную версию с финальными parameterId
+MUTATION_PUBLISH_TEMPLATE = (
+    FRAGMENT_API_ERROR
+    + """
+mutation publishYtmTemplate($containerId: String!, $templateId: String!) {
+    publishYtmTemplate(containerId: $containerId, templateId: $templateId) {
+        data {
+            containerId templateId name type templateVersion versionStatus
+            data { parameters { parameterId name label type } }
+        }
+        error { ...apiError }
+    }
+}
+"""
+)
+
+# Обновление кастомного шаблона (создаёт новый draft)
+MUTATION_EDIT_TEMPLATE = (
+    FRAGMENT_API_ERROR
+    + """
+mutation editYtmTemplate($containerId: String!, $template: YtmTemplateDetailedInput!) {
+    editYtmTemplate(containerId: $containerId, template: $template) {
+        data {
+            containerId templateId name type templateVersion versionStatus
+            data {
+                code
+                parameters { parameterId name label type }
+            }
+        }
+        error { ...apiError }
+    }
+}
+"""
+)
+
 # ============ ПЕРЕМЕННЫЕ ============
 
 # Список встроенных переменных (для подстановки в теги)
@@ -381,6 +507,28 @@ MUTATION_PUBLISH_VERSION = (
 mutation publishYtmVersion($containerId: String!, $isPreview: Boolean, $input: YtmPublishVersionInput) {
     publishYtmVersion(containerId: $containerId, isPreview: $isPreview, input: $input) {
         data
+        error { ...apiError }
+    }
+}
+"""
+)
+
+# Получить последнюю версию контейнера
+QUERY_LATEST_VERSION = (
+    FRAGMENT_API_ERROR
+    + FRAGMENT_DATE_TIME
+    + """
+fragment ytmContainerVersionBase on YtmContainerVersionBase {
+    version name description status
+    creationDate { ...dateTimeDto }
+    updated { ...dateTimeDto }
+    activationDate { ...dateTimeDto }
+    activatedBy errorMessage previewKey
+}
+
+query ytmLatestContainerVersion($containerId: String!, $isPreview: Boolean!) {
+    ytmLatestContainerVersion(containerId: $containerId, isPreview: $isPreview) {
+        data { ...ytmContainerVersionBase }
         error { ...apiError }
     }
 }
